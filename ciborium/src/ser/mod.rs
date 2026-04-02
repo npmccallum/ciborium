@@ -7,24 +7,51 @@ mod error;
 pub use error::Error;
 
 use alloc::string::ToString;
+use core::mem::take;
 
 use ciborium_io::Write;
 use ciborium_ll::*;
 use serde::{ser, Serialize as _};
 
-struct Serializer<W>(Encoder<W>);
+use crate::Indefinite;
+
+struct Serializer<W> {
+    encoder: Encoder<W>,
+    indefinite: bool,
+}
 
 impl<W: Write> From<W> for Serializer<W> {
     #[inline]
     fn from(writer: W) -> Self {
-        Self(writer.into())
+        Self {
+            encoder: writer.into(),
+            indefinite: false,
+        }
     }
 }
 
 impl<W: Write> From<Encoder<W>> for Serializer<W> {
     #[inline]
     fn from(writer: Encoder<W>) -> Self {
-        Self(writer)
+        Self {
+            encoder: writer,
+            indefinite: false,
+        }
+    }
+}
+
+impl<W: Write> Serializer<W>
+where
+    W::Error: core::fmt::Debug,
+{
+    /// Write a text string header and payload without touching the
+    /// indefinite-length flag. Used internally by variant serialization
+    /// methods that emit a variant name before delegating to the inner value.
+    #[inline]
+    fn write_str(&mut self, v: &str) -> Result<(), Error<W::Error>> {
+        let bytes = v.as_bytes();
+        self.encoder.push(Header::Text(bytes.len().into()))?;
+        Ok(self.encoder.write_all(bytes)?)
     }
 }
 
@@ -45,7 +72,8 @@ where
 
     #[inline]
     fn serialize_bool(self, v: bool) -> Result<(), Self::Error> {
-        Ok(self.0.push(match v {
+        self.indefinite = false;
+        Ok(self.encoder.push(match v {
             false => Header::Simple(simple::FALSE),
             true => Header::Simple(simple::TRUE),
         })?)
@@ -68,7 +96,8 @@ where
 
     #[inline]
     fn serialize_i64(self, v: i64) -> Result<(), Self::Error> {
-        Ok(self.0.push(match v.is_negative() {
+        self.indefinite = false;
+        Ok(self.encoder.push(match v.is_negative() {
             false => Header::Positive(v as u64),
             true => Header::Negative(v as u64 ^ !0),
         })?)
@@ -76,23 +105,25 @@ where
 
     #[inline]
     fn serialize_i128(self, v: i128) -> Result<(), Self::Error> {
+        self.indefinite = false;
+
         let (tag, raw) = match v.is_negative() {
             false => (tag::BIGPOS, v as u128),
             true => (tag::BIGNEG, v as u128 ^ !0),
         };
 
         match (tag, u64::try_from(raw)) {
-            (tag::BIGPOS, Ok(x)) => return Ok(self.0.push(Header::Positive(x))?),
-            (tag::BIGNEG, Ok(x)) => return Ok(self.0.push(Header::Negative(x))?),
+            (tag::BIGPOS, Ok(x)) => return Ok(self.encoder.push(Header::Positive(x))?),
+            (tag::BIGNEG, Ok(x)) => return Ok(self.encoder.push(Header::Negative(x))?),
             _ => {}
         }
 
         let first_non_zero_byte = raw.leading_zeros() as usize / 8;
         let slice = &raw.to_be_bytes()[first_non_zero_byte..];
 
-        self.0.push(Header::Tag(tag))?;
-        self.0.push(Header::Bytes(Some(slice.len())))?;
-        Ok(self.0.write_all(slice)?)
+        self.encoder.push(Header::Tag(tag))?;
+        self.encoder.push(Header::Bytes(Some(slice.len())))?;
+        Ok(self.encoder.write_all(slice)?)
     }
 
     #[inline]
@@ -112,21 +143,24 @@ where
 
     #[inline]
     fn serialize_u64(self, v: u64) -> Result<(), Self::Error> {
-        Ok(self.0.push(Header::Positive(v))?)
+        self.indefinite = false;
+        Ok(self.encoder.push(Header::Positive(v))?)
     }
 
     #[inline]
     fn serialize_u128(self, v: u128) -> Result<(), Self::Error> {
+        self.indefinite = false;
+
         if let Ok(x) = u64::try_from(v) {
-            return self.serialize_u64(x);
+            return Ok(self.encoder.push(Header::Positive(x))?);
         }
 
         let first_non_zero_byte = v.leading_zeros() as usize / 8;
         let slice = &v.to_be_bytes()[first_non_zero_byte..];
 
-        self.0.push(Header::Tag(tag::BIGPOS))?;
-        self.0.push(Header::Bytes(Some(slice.len())))?;
-        Ok(self.0.write_all(slice)?)
+        self.encoder.push(Header::Tag(tag::BIGPOS))?;
+        self.encoder.push(Header::Bytes(Some(slice.len())))?;
+        Ok(self.encoder.write_all(slice)?)
     }
 
     #[inline]
@@ -136,7 +170,8 @@ where
 
     #[inline]
     fn serialize_f64(self, v: f64) -> Result<(), Self::Error> {
-        Ok(self.0.push(Header::Float(v))?)
+        self.indefinite = false;
+        Ok(self.encoder.push(Header::Float(v))?)
     }
 
     #[inline]
@@ -146,20 +181,21 @@ where
 
     #[inline]
     fn serialize_str(self, v: &str) -> Result<(), Self::Error> {
-        let bytes = v.as_bytes();
-        self.0.push(Header::Text(bytes.len().into()))?;
-        Ok(self.0.write_all(bytes)?)
+        self.indefinite = false;
+        self.write_str(v)
     }
 
     #[inline]
     fn serialize_bytes(self, v: &[u8]) -> Result<(), Self::Error> {
-        self.0.push(Header::Bytes(v.len().into()))?;
-        Ok(self.0.write_all(v)?)
+        self.indefinite = false;
+        self.encoder.push(Header::Bytes(v.len().into()))?;
+        Ok(self.encoder.write_all(v)?)
     }
 
     #[inline]
     fn serialize_none(self) -> Result<(), Self::Error> {
-        Ok(self.0.push(Header::Simple(simple::NULL))?)
+        self.indefinite = false;
+        Ok(self.encoder.push(Header::Simple(simple::NULL))?)
     }
 
     #[inline]
@@ -190,9 +226,13 @@ where
     #[inline]
     fn serialize_newtype_struct<U: ?Sized + ser::Serialize>(
         self,
-        _name: &'static str,
+        name: &'static str,
         value: &U,
     ) -> Result<(), Self::Error> {
+        if name == Indefinite::<()>::SENTINEL {
+            self.indefinite = true;
+        }
+
         value.serialize(self)
     }
 
@@ -205,8 +245,8 @@ where
         value: &U,
     ) -> Result<(), Self::Error> {
         if name != "@@TAG@@" || variant != "@@UNTAGGED@@" {
-            self.0.push(Header::Map(Some(1)))?;
-            self.serialize_str(variant)?;
+            self.encoder.push(Header::Map(Some(1)))?;
+            self.write_str(variant)?;
         }
 
         value.serialize(self)
@@ -214,7 +254,13 @@ where
 
     #[inline]
     fn serialize_seq(self, length: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        self.0.push(Header::Array(length))?;
+        let length = if take(&mut self.indefinite) {
+            None
+        } else {
+            length
+        };
+
+        self.encoder.push(Header::Array(length))?;
         Ok(CollectionSerializer {
             encoder: self,
             ending: length.is_none(),
@@ -252,12 +298,15 @@ where
             }),
 
             _ => {
-                self.0.push(Header::Map(Some(1)))?;
-                self.serialize_str(variant)?;
-                self.0.push(Header::Array(Some(length)))?;
+                let indefinite = take(&mut self.indefinite);
+                self.encoder.push(Header::Map(Some(1)))?;
+                self.write_str(variant)?;
+
+                let length = if indefinite { None } else { Some(length) };
+                self.encoder.push(Header::Array(length))?;
                 Ok(CollectionSerializer {
                     encoder: self,
-                    ending: false,
+                    ending: length.is_none(),
                     tag: false,
                 })
             }
@@ -266,7 +315,13 @@ where
 
     #[inline]
     fn serialize_map(self, length: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        self.0.push(Header::Map(length))?;
+        let length = if take(&mut self.indefinite) {
+            None
+        } else {
+            length
+        };
+
+        self.encoder.push(Header::Map(length))?;
         Ok(CollectionSerializer {
             encoder: self,
             ending: length.is_none(),
@@ -280,10 +335,16 @@ where
         _name: &'static str,
         length: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        self.0.push(Header::Map(Some(length)))?;
+        let length = if take(&mut self.indefinite) {
+            None
+        } else {
+            Some(length)
+        };
+
+        self.encoder.push(Header::Map(length))?;
         Ok(CollectionSerializer {
             encoder: self,
-            ending: false,
+            ending: length.is_none(),
             tag: false,
         })
     }
@@ -296,12 +357,15 @@ where
         variant: &'static str,
         length: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.0.push(Header::Map(Some(1)))?;
-        self.serialize_str(variant)?;
-        self.0.push(Header::Map(Some(length)))?;
+        let indefinite = take(&mut self.indefinite);
+        self.encoder.push(Header::Map(Some(1)))?;
+        self.write_str(variant)?;
+
+        let length = if indefinite { None } else { Some(length) };
+        self.encoder.push(Header::Map(length))?;
         Ok(CollectionSerializer {
             encoder: self,
-            ending: false,
+            ending: length.is_none(),
             tag: false,
         })
     }
@@ -317,7 +381,7 @@ macro_rules! end {
         #[inline]
         fn end(self) -> Result<(), Self::Error> {
             if self.ending {
-                self.encoder.0.push(Header::Break)?;
+                self.encoder.encoder.push(Header::Break)?;
             }
 
             Ok(())
@@ -403,7 +467,7 @@ where
 
         self.tag = false;
         match value.serialize(crate::tag::Serializer) {
-            Ok(x) => Ok(self.encoder.0.push(Header::Tag(x))?),
+            Ok(x) => Ok(self.encoder.encoder.push(Header::Tag(x))?),
             _ => Err(Error::Value("expected tag".into())),
         }
     }

@@ -92,6 +92,8 @@
 
 extern crate alloc;
 
+mod indef;
+
 pub mod de;
 pub mod ser;
 pub mod tag;
@@ -112,6 +114,9 @@ pub use crate::ser::into_vec;
 
 #[doc(inline)]
 pub use crate::value::Value;
+
+#[doc(inline)]
+pub use crate::indef::Indefinite;
 
 /// Build a `Value` conveniently.
 ///
