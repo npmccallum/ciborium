@@ -3,6 +3,7 @@ resolver = "2"
 exclude = [ ".gitignore", ".github/*" ]
 members = [
     "ciborium",
+    "ciborium-atom",
     "ciborium-io",
     "ciborium-ll",
 ]

@@ -1,0 +1,27 @@
+[package]
+name = "ciborium-atom-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.ciborium-atom]
+path = ".."
+features = ["alloc"]
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+doc = false
+
+[[bin]]
+name = "roundtrip"
+path = "fuzz_targets/roundtrip.rs"
+doc = false
+
+[workspace]
