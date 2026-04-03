@@ -2,6 +2,7 @@
 
 use crate::error::Error;
 use crate::input::Input;
+use crate::output::Output;
 
 use super::short::Short;
 use super::Head;
@@ -57,6 +58,35 @@ impl Unsigned {
             Self::U2(v) => Head::new2(mt | 25, v.to_be_bytes()),
             Self::U4(v) => Head::new4(mt | 26, v.to_be_bytes()),
             Self::U8(v) => Head::new8(mt | 27, v.to_be_bytes()),
+        }
+    }
+
+    /// Encode this unsigned value to an output with the given major type.
+    #[inline]
+    pub(crate) fn encode_to<O: Output>(
+        self,
+        major: u8,
+        output: &mut O,
+    ) -> Result<(), O::Error> {
+        self.write_to(major, output, &[])
+    }
+
+    /// Encode this unsigned value to an output with the given major type
+    /// and a tail payload.
+    #[inline]
+    pub(crate) fn write_to<O: Output>(
+        self,
+        major: u8,
+        output: &mut O,
+        tail: &[u8],
+    ) -> Result<(), O::Error> {
+        let mt = major << 5;
+        match self {
+            Self::U0(v) => output.write(mt | v.get(), &[], tail),
+            Self::U1(v) => output.write(mt | 24, &[v], tail),
+            Self::U2(v) => output.write(mt | 25, &v.to_be_bytes(), tail),
+            Self::U4(v) => output.write(mt | 26, &v.to_be_bytes(), tail),
+            Self::U8(v) => output.write(mt | 27, &v.to_be_bytes(), tail),
         }
     }
 }

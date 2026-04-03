@@ -16,14 +16,23 @@ fn roundtrip(hex_str: &str, expected: Atom) {
     assert_eq!(decoded, expected, "decode mismatch for {hex_str}");
     assert!(input.is_empty(), "trailing bytes for {hex_str}");
 
-    // Encode
+    // Encode via Head
     let (head, tail) = decoded.encode();
     let mut encoded = head.to_vec();
     encoded.extend_from_slice(tail);
     assert_eq!(
         hex::encode(&encoded),
         hex_str,
-        "encode mismatch for {hex_str}"
+        "encode (Head) mismatch for {hex_str}"
+    );
+
+    // Encode via Output
+    let mut output = Vec::new();
+    decoded.encode_to(&mut output).unwrap();
+    assert_eq!(
+        hex::encode(&output),
+        hex_str,
+        "encode (Output) mismatch for {hex_str}"
     );
 }
 

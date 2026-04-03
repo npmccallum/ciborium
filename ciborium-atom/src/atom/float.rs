@@ -3,6 +3,8 @@
 use floats::casting::CastInto;
 use floats::f16;
 
+use crate::output::Output;
+
 use super::Head;
 
 /// A CBOR floating-point value preserving its wire size.
@@ -27,6 +29,17 @@ impl Float {
             Self::F2(v) => Head::new2(mt | 25, v.to_be_bytes()),
             Self::F4(v) => Head::new4(mt | 26, v.to_be_bytes()),
             Self::F8(v) => Head::new8(mt | 27, v.to_be_bytes()),
+        }
+    }
+
+    /// Encode this float to an output (major type 7).
+    #[inline]
+    pub(crate) fn encode_to<O: Output>(self, output: &mut O) -> Result<(), O::Error> {
+        let mt = 7 << 5;
+        match self {
+            Self::F2(v) => output.write(mt | 25, &v.to_be_bytes(), &[]),
+            Self::F4(v) => output.write(mt | 26, &v.to_be_bytes(), &[]),
+            Self::F8(v) => output.write(mt | 27, &v.to_be_bytes(), &[]),
         }
     }
 }

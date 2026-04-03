@@ -19,6 +19,7 @@ use floats::f16;
 
 use crate::error::Error;
 use crate::input::Input;
+use crate::output::Output;
 
 /// A single CBOR item as it appears on the wire.
 ///
@@ -83,6 +84,40 @@ impl Atom<'_> {
 
             Self::Other(None) => (Head::new0(7 << 5 | 31), &[]),
             Self::Other(Some(o)) => (o.encode(), &[]),
+        }
+    }
+
+    /// Encode this atom to an output.
+    ///
+    /// Note: for `Bytes` and `Text` variants, the length is derived from
+    /// the payload data and always encoded in the smallest form. This is
+    /// the only case where the wire encoding cannot be controlled
+    /// directly; all other variants preserve their exact wire size.
+    pub fn encode_to<O: Output>(&self, output: &mut O) -> Result<(), O::Error> {
+        match self {
+            Self::Positive(u) => u.encode_to(0, output),
+            Self::Negative(u) => u.encode_to(1, output),
+
+            Self::Bytes(None) => output.write(2 << 5 | 31, &[], &[]),
+            Self::Bytes(Some(b)) => {
+                Unsigned::from(b.len() as u64).write_to(2, output, b)
+            }
+
+            Self::Text(None) => output.write(3 << 5 | 31, &[], &[]),
+            Self::Text(Some(s)) => {
+                Unsigned::from(s.len() as u64).write_to(3, output, s.as_bytes())
+            }
+
+            Self::Array(None) => output.write(4 << 5 | 31, &[], &[]),
+            Self::Array(Some(u)) => u.encode_to(4, output),
+
+            Self::Map(None) => output.write(5 << 5 | 31, &[], &[]),
+            Self::Map(Some(u)) => u.encode_to(5, output),
+
+            Self::Tag(u) => u.encode_to(6, output),
+
+            Self::Other(None) => output.write(7 << 5 | 31, &[], &[]),
+            Self::Other(Some(o)) => o.encode_to(output),
         }
     }
 }

@@ -23,6 +23,8 @@ mod atom;
 mod error;
 
 pub mod input;
+pub mod output;
 
 pub use atom::{Atom, Float, Head, Other, Short, Simple, Unsigned};
 pub use error::Error;
+pub use output::Output;
