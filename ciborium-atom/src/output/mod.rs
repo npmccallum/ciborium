@@ -4,7 +4,6 @@
 
 pub mod slice;
 mod vec;
-#[cfg(feature = "std")]
 pub mod write;
 
 /// A sink for encoded CBOR bytes.

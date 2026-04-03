@@ -2,6 +2,8 @@
 
 //! Output implementation for [`std::io::Write`] types.
 
+#![cfg(feature = "std")]
+
 extern crate std;
 
 use std::io;
