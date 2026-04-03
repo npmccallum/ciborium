@@ -22,17 +22,18 @@ fuzz_target!(|data: &[u8]| {
                 let consumed = before - input.len();
                 let original = &data[data.len() - before..data.len() - before + consumed];
 
-                let (head, tail) = atom.encode();
                 let mut encoded = Vec::new();
-                encoded.extend_from_slice(&head);
-                encoded.extend_from_slice(tail);
+                atom.encode(&mut encoded).unwrap();
 
                 match &atom {
                     // Bytes/Text lengths are derived from payload and always
                     // minimized, so a byte-exact roundtrip is not guaranteed.
                     // Verify the payload content matches instead.
-                    Atom::Bytes(Some(_)) | Atom::Text(Some(_)) => {
-                        assert_eq!(tail, &original[original.len() - tail.len()..]);
+                    Atom::Bytes(Some(b)) => {
+                        assert_eq!(&**b, &original[original.len() - b.len()..]);
+                    }
+                    Atom::Text(Some(s)) => {
+                        assert_eq!(s.as_bytes(), &original[original.len() - s.len()..]);
                     }
 
                     _ => {

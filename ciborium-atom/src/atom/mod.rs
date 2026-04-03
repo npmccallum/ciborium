@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod float;
-mod head;
 mod other;
 pub(crate) mod short;
 mod simple;
 mod unsigned;
 
 pub use float::Float;
-pub use head::Head;
 pub use other::Other;
 pub use short::Short;
 pub use simple::Simple;
@@ -53,71 +51,37 @@ pub enum Atom<'a> {
 }
 
 impl Atom<'_> {
-    /// Encode this atom into a head and a tail.
-    ///
-    /// The head contains the CBOR major type and argument bytes. The tail
-    /// contains the payload data for `Bytes` and `Text` variants, and is
-    /// empty for all other variants.
-    ///
-    /// Note: for `Bytes` and `Text` variants, the length is derived from
-    /// the payload data and always encoded in the smallest form. This is
-    /// the only case where the wire encoding cannot be controlled
-    /// directly; all other variants preserve their exact wire size.
-    pub fn encode(&self) -> (Head, &[u8]) {
-        match self {
-            Self::Positive(u) => (u.encode(0), &[]),
-            Self::Negative(u) => (u.encode(1), &[]),
-
-            Self::Bytes(None) => (Head::new0(2 << 5 | 31), &[]),
-            Self::Bytes(Some(b)) => (Unsigned::from(b.len() as u64).encode(2), b),
-
-            Self::Text(None) => (Head::new0(3 << 5 | 31), &[]),
-            Self::Text(Some(s)) => (Unsigned::from(s.len() as u64).encode(3), s.as_bytes()),
-
-            Self::Array(None) => (Head::new0(4 << 5 | 31), &[]),
-            Self::Array(Some(u)) => (u.encode(4), &[]),
-
-            Self::Map(None) => (Head::new0(5 << 5 | 31), &[]),
-            Self::Map(Some(u)) => (u.encode(5), &[]),
-
-            Self::Tag(u) => (u.encode(6), &[]),
-
-            Self::Other(None) => (Head::new0(7 << 5 | 31), &[]),
-            Self::Other(Some(o)) => (o.encode(), &[]),
-        }
-    }
-
     /// Encode this atom to an output.
     ///
     /// Note: for `Bytes` and `Text` variants, the length is derived from
     /// the payload data and always encoded in the smallest form. This is
     /// the only case where the wire encoding cannot be controlled
     /// directly; all other variants preserve their exact wire size.
-    pub fn encode_to<O: Output>(&self, output: &mut O) -> Result<(), O::Error> {
+    pub fn encode<O: Output>(&self, output: &mut O) -> Result<(), O::Error> {
         match self {
-            Self::Positive(u) => u.encode_to(0, output),
-            Self::Negative(u) => u.encode_to(1, output),
+            Self::Positive(u) => u.encode(0, output),
+            Self::Negative(u) => u.encode(1, output),
 
             Self::Bytes(None) => output.write(2 << 5 | 31, &[], &[]),
             Self::Bytes(Some(b)) => {
-                Unsigned::from(b.len() as u64).write_to(2, output, b)
+                Unsigned::from(b.len() as u64).write(2, output, b)
             }
 
             Self::Text(None) => output.write(3 << 5 | 31, &[], &[]),
             Self::Text(Some(s)) => {
-                Unsigned::from(s.len() as u64).write_to(3, output, s.as_bytes())
+                Unsigned::from(s.len() as u64).write(3, output, s.as_bytes())
             }
 
             Self::Array(None) => output.write(4 << 5 | 31, &[], &[]),
-            Self::Array(Some(u)) => u.encode_to(4, output),
+            Self::Array(Some(u)) => u.encode(4, output),
 
             Self::Map(None) => output.write(5 << 5 | 31, &[], &[]),
-            Self::Map(Some(u)) => u.encode_to(5, output),
+            Self::Map(Some(u)) => u.encode(5, output),
 
-            Self::Tag(u) => u.encode_to(6, output),
+            Self::Tag(u) => u.encode(6, output),
 
             Self::Other(None) => output.write(7 << 5 | 31, &[], &[]),
-            Self::Other(Some(o)) => o.encode_to(output),
+            Self::Other(Some(o)) => o.encode(output),
         }
     }
 }

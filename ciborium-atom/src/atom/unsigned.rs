@@ -5,7 +5,6 @@ use crate::input::Input;
 use crate::output::Output;
 
 use super::short::Short;
-use super::Head;
 
 /// All sizes a CBOR unsigned integer can take on the wire.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -48,33 +47,20 @@ impl Unsigned {
         }
     }
 
-    /// Encode this unsigned value as a CBOR head with the given major type.
-    #[inline]
-    pub(crate) fn encode(self, major: u8) -> Head {
-        let mt = major << 5;
-        match self {
-            Self::U0(v) => Head::new0(mt | v.get()),
-            Self::U1(v) => Head::new1(mt | 24, [v]),
-            Self::U2(v) => Head::new2(mt | 25, v.to_be_bytes()),
-            Self::U4(v) => Head::new4(mt | 26, v.to_be_bytes()),
-            Self::U8(v) => Head::new8(mt | 27, v.to_be_bytes()),
-        }
-    }
-
     /// Encode this unsigned value to an output with the given major type.
     #[inline]
-    pub(crate) fn encode_to<O: Output>(
+    pub(crate) fn encode<O: Output>(
         self,
         major: u8,
         output: &mut O,
     ) -> Result<(), O::Error> {
-        self.write_to(major, output, &[])
+        self.write(major, output, &[])
     }
 
     /// Encode this unsigned value to an output with the given major type
     /// and a tail payload.
     #[inline]
-    pub(crate) fn write_to<O: Output>(
+    pub(crate) fn write<O: Output>(
         self,
         major: u8,
         output: &mut O,

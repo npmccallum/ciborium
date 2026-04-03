@@ -44,10 +44,14 @@ separately, so non-minimal length encodings cannot survive a roundtrip.
 use ciborium_atom::{Atom, Unsigned};
 
 let atom = Atom::Positive(Unsigned::from(42u64));
-let (head, tail) = atom.encode();
-// head: &[u8] containing the CBOR head bytes
-// tail: &[u8] containing payload (non-empty only for Bytes/Text)
+let mut buf = Vec::new();
+atom.encode(&mut buf).unwrap();
 ```
+
+The [`Output`](output::Output) trait abstracts the byte sink.
+Implementations are provided for `Vec<u8>`, `&mut [u8]`, and
+(with the `std` feature) `std::io::Write` via
+[`Writer`](output::write::Writer).
 
 ## Decoding
 

@@ -16,23 +16,13 @@ fn roundtrip(hex_str: &str, expected: Atom) {
     assert_eq!(decoded, expected, "decode mismatch for {hex_str}");
     assert!(input.is_empty(), "trailing bytes for {hex_str}");
 
-    // Encode via Head
-    let (head, tail) = decoded.encode();
-    let mut encoded = head.to_vec();
-    encoded.extend_from_slice(tail);
+    // Encode
+    let mut encoded = Vec::new();
+    decoded.encode(&mut encoded).unwrap();
     assert_eq!(
         hex::encode(&encoded),
         hex_str,
-        "encode (Head) mismatch for {hex_str}"
-    );
-
-    // Encode via Output
-    let mut output = Vec::new();
-    decoded.encode_to(&mut output).unwrap();
-    assert_eq!(
-        hex::encode(&output),
-        hex_str,
-        "encode (Output) mismatch for {hex_str}"
+        "encode mismatch for {hex_str}"
     );
 }
 
@@ -385,9 +375,8 @@ fn float_f2_nan() {
         other => panic!("expected f16 NaN, got {other:?}"),
     }
 
-    let (head, tail) = decoded.encode();
-    let mut encoded = head.to_vec();
-    encoded.extend_from_slice(tail);
+    let mut encoded = Vec::new();
+    decoded.encode(&mut encoded).unwrap();
     assert_eq!(hex::encode(&encoded), "f97e00");
 }
 
@@ -769,14 +758,16 @@ fn float_try_from() {
 
 #[test]
 fn wire_size_preserved_unsigned() {
-    let (head, _) = Atom::Positive(Unsigned::U2(0)).encode();
-    assert_eq!(&*head, &hex::decode("190000").unwrap()[..]);
+    let mut buf = Vec::new();
+    Atom::Positive(Unsigned::U2(0)).encode(&mut buf).unwrap();
+    assert_eq!(buf, hex::decode("190000").unwrap());
 }
 
 #[test]
 fn wire_size_preserved_float() {
-    let (head, _) = Atom::Other(Some(Other::Float(Float::F8(1.0)))).encode();
-    assert_eq!(&*head, &hex::decode("fb3ff0000000000000").unwrap()[..]);
+    let mut buf = Vec::new();
+    Atom::Other(Some(Other::Float(Float::F8(1.0)))).encode(&mut buf).unwrap();
+    assert_eq!(buf, hex::decode("fb3ff0000000000000").unwrap());
 }
 
 // ----------------------------------------------------------------
@@ -785,20 +776,20 @@ fn wire_size_preserved_float() {
 
 #[test]
 fn encode_bytes_length() {
-    let (head, tail) = Atom::Bytes(Some(Flex::Lend(&[]))).encode();
-    assert_eq!(&*head, &[0x40]);
-    assert!(tail.is_empty());
+    let mut buf = Vec::new();
+    Atom::Bytes(Some(Flex::Lend(&[]))).encode(&mut buf).unwrap();
+    assert_eq!(buf, &[0x40]);
 
-    let (head, tail) = Atom::Bytes(Some(Flex::Lend(&[1, 2, 3, 4]))).encode();
-    assert_eq!(&*head, &[0x44]);
-    assert_eq!(tail, &[1, 2, 3, 4]);
+    buf.clear();
+    Atom::Bytes(Some(Flex::Lend(&[1, 2, 3, 4]))).encode(&mut buf).unwrap();
+    assert_eq!(buf, &[0x44, 1, 2, 3, 4]);
 }
 
 #[test]
 fn encode_text_length() {
-    let (head, tail) = Atom::Text(Some(Flex::Lend("IETF"))).encode();
-    assert_eq!(&*head, &[0x64]);
-    assert_eq!(tail, b"IETF");
+    let mut buf = Vec::new();
+    Atom::Text(Some(Flex::Lend("IETF"))).encode(&mut buf).unwrap();
+    assert_eq!(buf, b"\x64IETF");
 }
 
 #[test]
@@ -811,8 +802,8 @@ fn encode_all_indefinite_markers() {
         ("ff", Atom::Other(None)),
     ];
     for (hex_str, atom) in &cases {
-        let (head, tail) = atom.encode();
-        assert_eq!(hex::encode(&*head), *hex_str);
-        assert!(tail.is_empty());
+        let mut buf = Vec::new();
+        atom.encode(&mut buf).unwrap();
+        assert_eq!(hex::encode(&buf), *hex_str);
     }
 }
