@@ -4,6 +4,7 @@
 
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(feature = "nightly", feature(f16, write_all_vectored))]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![deny(clippy::all)]

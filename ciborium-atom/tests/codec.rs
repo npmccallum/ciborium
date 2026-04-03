@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#![cfg_attr(feature = "nightly", feature(f16))]
+
 use ciborium_atom::input::slice::Error as SliceError;
 use ciborium_atom::*;
 use flex::Flex;

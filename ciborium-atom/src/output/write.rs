@@ -6,11 +6,9 @@
 
 extern crate std;
 
-use std::io::{self, IoSlice, Write};
-
 use super::Output;
 
-/// Wrapper that implements [`Output`] for any [`Write`] type.
+/// Wrapper that implements [`Output`] for any [`std::io::Write`] type.
 pub struct Writer<W>(W);
 
 impl<W> From<W> for Writer<W> {
@@ -20,30 +18,42 @@ impl<W> From<W> for Writer<W> {
     }
 }
 
-impl<W: Write> Output for Writer<W> {
-    type Error = io::Error;
+impl<W: std::io::Write> Output for Writer<W> {
+    type Error = std::io::Error;
 
+    #[cfg(feature = "nightly")]
     fn write(&mut self, head: u8, body: &[u8], tail: &[u8]) -> Result<(), Self::Error> {
-        let mut hb = [0u8; 9];
-        let (h, rest) = hb.split_first_mut().ok_or(io::ErrorKind::Other)?;
-        *h = head;
-        let dst = rest.get_mut(..body.len()).ok_or(io::ErrorKind::Other)?;
-        dst.copy_from_slice(body);
-        let hb = hb.get(..body.len().saturating_add(1)).ok_or(io::ErrorKind::Other)?;
+        self.0.write_all_vectored(&mut [
+            std::io::IoSlice::new(&[head]),
+            std::io::IoSlice::new(body),
+            std::io::IoSlice::new(tail),
+        ])
+    }
 
-        let mut bufs = [IoSlice::new(hb), IoSlice::new(tail)];
-        let total = hb.len().saturating_add(tail.len());
+    #[cfg(not(feature = "nightly"))]
+    fn write(&mut self, head: u8, body: &[u8], tail: &[u8]) -> Result<(), Self::Error> {
+        let mut bufs = [
+            std::io::IoSlice::new(core::slice::from_ref(&head)),
+            std::io::IoSlice::new(body),
+            std::io::IoSlice::new(tail),
+        ];
+
+        let total = 1usize.saturating_add(body.len()).saturating_add(tail.len());
         let mut written = 0usize;
 
         while written < total {
             let n = self.0.write_vectored(&bufs)?;
             if n == 0 {
-                return Err(io::ErrorKind::WriteZero.into());
+                return Err(std::io::ErrorKind::WriteZero.into());
             }
             written = written.saturating_add(n);
+
+            let body_skip = written.saturating_sub(1);
+            let tail_skip = body_skip.saturating_sub(body.len());
             bufs = [
-                IoSlice::new(hb.get(hb.len().min(written)..).unwrap_or(&[])),
-                IoSlice::new(tail.get(written.saturating_sub(hb.len())..).unwrap_or(&[])),
+                std::io::IoSlice::new(&[]),
+                std::io::IoSlice::new(body.get(body.len().min(body_skip)..).unwrap_or(&[])),
+                std::io::IoSlice::new(tail.get(tail.len().min(tail_skip)..).unwrap_or(&[])),
             ];
         }
 

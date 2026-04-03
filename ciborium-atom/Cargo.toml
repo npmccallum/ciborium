@@ -26,6 +26,7 @@ flex = "0.2"
 default = ["alloc"]
 alloc = ["flex/alloc"]
 std = ["alloc"]
+nightly = ["floats/nightly"]
 
 [dev-dependencies]
 hex = "0.4"
