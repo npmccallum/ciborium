@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![doc = include_str!("../README.md")]
-
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(feature = "nightly", feature(f16, write_all_vectored))]
@@ -28,4 +27,3 @@ pub mod output;
 
 pub use atom::{Atom, Float, Other, Short, Simple, Unsigned};
 pub use error::Error;
-pub use output::Output;

@@ -70,6 +70,24 @@ fn span_tracks_bytes_payload() {
     assert_eq!(input.span(), 0..5);
 }
 
+#[test]
+fn span_tracks_utf8_error() {
+    // 0x01 = positive(1), then 0x62 0xc3 0x28 = text(2) with invalid UTF-8
+    let bytes = hex::decode("0162c328").unwrap();
+    let mut input = Span::from(bytes.as_slice());
+
+    // First atom succeeds
+    Atom::decode(&mut input).unwrap().unwrap();
+    assert_eq!(input.span(), 0..1);
+
+    // Second atom fails on UTF-8 — span starts at the text atom's head byte.
+    // The read position only reflects successfully tracked bytes (head byte
+    // was read, but text() failed before Span could update).
+    let err = Atom::decode(&mut input);
+    assert!(err.is_err());
+    assert_eq!(input.span(), 1..2);
+}
+
 // ----------------------------------------------------------------
 // &mut T blanket impl
 // ----------------------------------------------------------------
@@ -107,6 +125,7 @@ fn blanket_mut_ref_tail_and_text() {
 // ----------------------------------------------------------------
 
 #[test]
+#[allow(invalid_from_utf8)]
 fn slice_error_display() {
     assert_eq!(SliceError::Underflow.to_string(), "not enough bytes");
 
@@ -116,6 +135,7 @@ fn slice_error_display() {
 }
 
 #[test]
+#[allow(invalid_from_utf8)]
 fn slice_error_source() {
     use core::error::Error as _;
 

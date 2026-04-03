@@ -17,7 +17,7 @@ pub enum Simple {
 impl Simple {
     /// Encode this simple value to an output (major type 7).
     #[inline]
-    pub(crate) fn encode<O: Output>(self, output: &mut O) -> Result<(), O::Error> {
+    pub(crate) fn encode<O: Output>(self, mut output: O) -> Result<(), O::Error> {
         let mt = 7 << 5;
         match self {
             Self::S0(v) => output.write(mt | v.get(), &[], &[]),

@@ -28,7 +28,7 @@ pub enum Unsigned {
 impl Unsigned {
     /// Decode an unsigned argument from the additional info value.
     pub(crate) fn decode<'a, I: Input<'a>>(
-        input: &mut I,
+        mut input: I,
         info: u8,
     ) -> Result<Self, Error<I::Error>> {
         match info {
@@ -51,19 +51,8 @@ impl Unsigned {
     #[inline]
     pub(crate) fn encode<O: Output>(
         self,
+        mut output: O,
         major: u8,
-        output: &mut O,
-    ) -> Result<(), O::Error> {
-        self.write(major, output, &[])
-    }
-
-    /// Encode this unsigned value to an output with the given major type
-    /// and a tail payload.
-    #[inline]
-    pub(crate) fn write<O: Output>(
-        self,
-        major: u8,
-        output: &mut O,
         tail: &[u8],
     ) -> Result<(), O::Error> {
         let mt = major << 5;

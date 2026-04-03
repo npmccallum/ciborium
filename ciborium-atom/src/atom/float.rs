@@ -21,7 +21,7 @@ pub enum Float {
 impl Float {
     /// Encode this float to an output (major type 7).
     #[inline]
-    pub(crate) fn encode<O: Output>(self, output: &mut O) -> Result<(), O::Error> {
+    pub(crate) fn encode<O: Output>(self, mut output: O) -> Result<(), O::Error> {
         let mt = 7 << 5;
         match self {
             Self::F2(v) => output.write(mt | 25, &v.to_be_bytes(), &[]),

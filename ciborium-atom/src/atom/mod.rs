@@ -2,7 +2,7 @@
 
 mod float;
 mod other;
-pub(crate) mod short;
+mod short;
 mod simple;
 mod unsigned;
 
@@ -13,7 +13,6 @@ pub use simple::Simple;
 pub use unsigned::Unsigned;
 
 use flex::Flex;
-use floats::f16;
 
 use crate::error::Error;
 use crate::input::Input;
@@ -57,28 +56,24 @@ impl Atom<'_> {
     /// the payload data and always encoded in the smallest form. This is
     /// the only case where the wire encoding cannot be controlled
     /// directly; all other variants preserve their exact wire size.
-    pub fn encode<O: Output>(&self, output: &mut O) -> Result<(), O::Error> {
+    pub fn encode<O: Output>(&self, mut output: O) -> Result<(), O::Error> {
         match self {
-            Self::Positive(u) => u.encode(0, output),
-            Self::Negative(u) => u.encode(1, output),
+            Self::Positive(u) => u.encode(output, 0, &[]),
+            Self::Negative(u) => u.encode(output, 1, &[]),
 
             Self::Bytes(None) => output.write(2 << 5 | 31, &[], &[]),
-            Self::Bytes(Some(b)) => {
-                Unsigned::from(b.len() as u64).write(2, output, b)
-            }
+            Self::Bytes(Some(b)) => Unsigned::from(b.len() as u64).encode(output, 2, b),
 
             Self::Text(None) => output.write(3 << 5 | 31, &[], &[]),
-            Self::Text(Some(s)) => {
-                Unsigned::from(s.len() as u64).write(3, output, s.as_bytes())
-            }
+            Self::Text(Some(s)) => Unsigned::from(s.len() as u64).encode(output, 3, s.as_bytes()),
 
             Self::Array(None) => output.write(4 << 5 | 31, &[], &[]),
-            Self::Array(Some(u)) => u.encode(4, output),
+            Self::Array(Some(u)) => u.encode(output, 4, &[]),
 
             Self::Map(None) => output.write(5 << 5 | 31, &[], &[]),
-            Self::Map(Some(u)) => u.encode(5, output),
+            Self::Map(Some(u)) => u.encode(output, 5, &[]),
 
-            Self::Tag(u) => u.encode(6, output),
+            Self::Tag(u) => u.encode(output, 6, &[]),
 
             Self::Other(None) => output.write(7 << 5 | 31, &[], &[]),
             Self::Other(Some(o)) => o.encode(output),
@@ -90,7 +85,7 @@ impl<'a> Atom<'a> {
     /// Decode a single CBOR atom from the input.
     ///
     /// Returns `Ok(None)` at end of stream.
-    pub fn decode<I: Input<'a>>(input: &mut I) -> Result<Option<Self>, Error<I::Error>> {
+    pub fn decode<I: Input<'a>>(mut input: I) -> Result<Option<Self>, Error<I::Error>> {
         let first = match input.head().map_err(Error::Input)? {
             Some(b) => b,
             None => return Ok(None),
@@ -100,12 +95,12 @@ impl<'a> Atom<'a> {
         let info = first & 0x1f;
 
         let atom = match major {
-            0 => Self::Positive(Unsigned::decode(input, info)?),
-            1 => Self::Negative(Unsigned::decode(input, info)?),
+            0 => Self::Positive(Unsigned::decode(&mut input, info)?),
+            1 => Self::Negative(Unsigned::decode(&mut input, info)?),
 
             2 if info == 31 => Self::Bytes(None),
             2 => {
-                let u = Unsigned::decode(input, info)?;
+                let u = Unsigned::decode(&mut input, info)?;
                 let len = usize::try_from(u).map_err(|_| Error::Overflow)?;
                 let data = input.tail(len).map_err(Error::Input)?;
                 Self::Bytes(Some(data))
@@ -113,41 +108,21 @@ impl<'a> Atom<'a> {
 
             3 if info == 31 => Self::Text(None),
             3 => {
-                let u = Unsigned::decode(input, info)?;
+                let u = Unsigned::decode(&mut input, info)?;
                 let len = usize::try_from(u).map_err(|_| Error::Overflow)?;
                 let data = input.text(len).map_err(Error::Input)?;
                 Self::Text(Some(data))
             }
 
             4 if info == 31 => Self::Array(None),
-            4 => Self::Array(Some(Unsigned::decode(input, info)?)),
+            4 => Self::Array(Some(Unsigned::decode(&mut input, info)?)),
 
             5 if info == 31 => Self::Map(None),
-            5 => Self::Map(Some(Unsigned::decode(input, info)?)),
+            5 => Self::Map(Some(Unsigned::decode(&mut input, info)?)),
 
-            6 => Self::Tag(Unsigned::decode(input, info)?),
+            6 => Self::Tag(Unsigned::decode(&mut input, info)?),
 
-            7 if info == 31 => Self::Other(None),
-            7 if info == 25 => {
-                let bytes = input.body::<2>().map_err(Error::Input)?;
-                Self::Other(Some(Other::Float(Float::F2(f16::from_be_bytes(bytes)))))
-            }
-            7 if info == 26 => {
-                let bytes = input.body::<4>().map_err(Error::Input)?;
-                Self::Other(Some(Other::Float(Float::F4(f32::from_be_bytes(bytes)))))
-            }
-            7 if info == 27 => {
-                let bytes = input.body::<8>().map_err(Error::Input)?;
-                Self::Other(Some(Other::Float(Float::F8(f64::from_be_bytes(bytes)))))
-            }
-            7 if info < 24 => {
-                Self::Other(Some(Other::Simple(Simple::S0(Short(info)))))
-            }
-            7 if info == 24 => {
-                let v = input.body::<1>().map_err(Error::Input)?[0];
-                Self::Other(Some(Other::Simple(Simple::S1(v))))
-            }
-            7 => return Err(Error::Invalid), // info 28-30
+            7 => Self::Other(Other::decode(&mut input, info)?),
 
             _ => return Err(Error::Invalid), // major is 3 bits; can't happen
         };
