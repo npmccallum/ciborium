@@ -2,8 +2,9 @@
 
 //! Output sinks for CBOR encoding.
 
-pub mod slice;
 mod vec;
+
+pub mod slice;
 pub mod write;
 
 /// A sink for encoded CBOR bytes.

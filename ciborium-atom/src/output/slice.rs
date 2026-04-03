@@ -20,25 +20,23 @@ impl Output for &mut [u8] {
     type Error = Error;
 
     fn write(&mut self, head: u8, body: &[u8], tail: &[u8]) -> Result<(), Self::Error> {
+        let total = 1usize
+            .checked_add(body.len())
+            .and_then(|n| n.checked_add(tail.len()))
+            .ok_or(Error)?;
+
+        if self.len() < total {
+            return Err(Error);
+        }
+
         let buf = core::mem::take(self);
+        let (dst, buf) = buf.split_at_mut(total);
 
-        // Split off space for head byte.
-        let (dst, buf) = buf.split_first_mut().ok_or(Error)?;
-        *dst = head;
-
-        // Split off space for body.
-        if buf.len() < body.len() {
-            return Err(Error);
-        }
-        let (dst, buf) = buf.split_at_mut(body.len());
-        dst.copy_from_slice(body);
-
-        // Split off space for tail.
-        if buf.len() < tail.len() {
-            return Err(Error);
-        }
-        let (dst, buf) = buf.split_at_mut(tail.len());
-        dst.copy_from_slice(tail);
+        let (h, bt) = dst.split_first_mut().ok_or(Error)?;
+        *h = head;
+        let (b, t) = bt.split_at_mut(body.len());
+        b.copy_from_slice(body);
+        t.copy_from_slice(tail);
 
         *self = buf;
         Ok(())
