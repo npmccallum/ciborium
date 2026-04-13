@@ -19,7 +19,7 @@ is-it-maintained-issue-resolution = { repository = "enarx/ciborium" }
 is-it-maintained-open-issues = { repository = "enarx/ciborium" }
 
 [dependencies]
-floats = { version = "0.2", features = ["casting"] }
+floats = { path = "../../floats", features = ["casting"] }
 flex = "0.2"
 
 [features]

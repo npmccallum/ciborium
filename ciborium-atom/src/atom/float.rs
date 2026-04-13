@@ -31,6 +31,52 @@ impl Float {
     }
 }
 
+impl Float {
+    /// Shrink to the smallest lossless wire representation.
+    ///
+    /// NaN values are canonicalized to f16, preserving the sign bit.
+    #[inline]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn shrink(self) -> Self {
+        match self {
+            Self::F8(v) => {
+                if v.is_nan() {
+                    let nan: f16 = v.cast_into();
+                    return Self::F2(nan);
+                }
+
+                let single = v as f32;
+                if single as f64 == v {
+                    return Self::F4(single).shrink();
+                }
+
+                Self::F8(v)
+            }
+            Self::F4(v) => {
+                if v.is_nan() {
+                    let nan: f16 = v.cast_into();
+                    return Self::F2(nan);
+                }
+
+                let half: f16 = v.cast_into();
+                let back: f32 = half.cast_into();
+                if back == v {
+                    return Self::F2(half);
+                }
+
+                Self::F4(v)
+            }
+            Self::F2(v) => Self::F2(v),
+        }
+    }
+
+    /// Expand to the largest wire representation (F8).
+    #[inline]
+    pub fn expand(self) -> Self {
+        Self::F8(f64::from(self))
+    }
+}
+
 impl From<f16> for Float {
     #[inline]
     fn from(v: f16) -> Self {
@@ -41,33 +87,13 @@ impl From<f16> for Float {
 impl From<f32> for Float {
     #[inline]
     fn from(v: f32) -> Self {
-        if v.is_nan() {
-            return Self::F2(f16::from_bits(0x7e00));
-        }
-
-        let half: f16 = v.cast_into();
-        let back: f32 = half.cast_into();
-        if back == v {
-            return Self::F2(half);
-        }
-
         Self::F4(v)
     }
 }
 
 impl From<f64> for Float {
     #[inline]
-    #[allow(clippy::cast_possible_truncation)] // intentional: we check the roundtrip
     fn from(v: f64) -> Self {
-        if v.is_nan() {
-            return Self::F2(f16::from_bits(0x7e00));
-        }
-
-        let single = v as f32;
-        if single as f64 == v {
-            return single.into();
-        }
-
         Self::F8(v)
     }
 }

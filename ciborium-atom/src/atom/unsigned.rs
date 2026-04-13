@@ -64,45 +64,63 @@ impl Unsigned {
             Self::U8(v) => output.write(mt | 27, &v.to_be_bytes(), tail),
         }
     }
+
+    /// Shrink to the smallest lossless wire representation.
+    #[inline]
+    pub fn shrink(self) -> Self {
+        match self {
+            Self::U8(v) => match u32::try_from(v) {
+                Ok(v) => Self::U4(v).shrink(),
+                Err(_) => Self::U8(v),
+            },
+            Self::U4(v) => match u16::try_from(v) {
+                Ok(v) => Self::U2(v).shrink(),
+                Err(_) => Self::U4(v),
+            },
+            Self::U2(v) => match u8::try_from(v) {
+                Ok(v) => Self::U1(v).shrink(),
+                Err(_) => Self::U2(v),
+            },
+            Self::U1(v) => match Short::new(v) {
+                Some(s) => Self::U0(s),
+                None => Self::U1(v),
+            },
+            Self::U0(v) => Self::U0(v),
+        }
+    }
+
+    /// Expand to the largest wire representation (U8).
+    #[inline]
+    pub fn expand(self) -> Self {
+        Self::U8(u64::from(self))
+    }
 }
 
 impl From<u8> for Unsigned {
     #[inline]
     fn from(v: u8) -> Self {
-        match Short::new(v) {
-            Some(s) => Self::U0(s),
-            None => Self::U1(v),
-        }
+        Self::U1(v)
     }
 }
 
 impl From<u16> for Unsigned {
     #[inline]
     fn from(v: u16) -> Self {
-        match u8::try_from(v) {
-            Ok(v) => v.into(),
-            Err(_) => Self::U2(v),
-        }
+        Self::U2(v)
     }
 }
 
 impl From<u32> for Unsigned {
     #[inline]
     fn from(v: u32) -> Self {
-        match u16::try_from(v) {
-            Ok(v) => v.into(),
-            Err(_) => Self::U4(v),
-        }
+        Self::U4(v)
     }
 }
 
 impl From<u64> for Unsigned {
     #[inline]
     fn from(v: u64) -> Self {
-        match u32::try_from(v) {
-            Ok(v) => v.into(),
-            Err(_) => Self::U8(v),
-        }
+        Self::U8(v)
     }
 }
 

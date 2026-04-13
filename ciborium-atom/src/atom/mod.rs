@@ -50,6 +50,28 @@ pub enum Atom<'a> {
 }
 
 impl Atom<'_> {
+    /// Shrink all numeric values to the smallest lossless wire representation.
+    #[inline]
+    pub fn shrink(self) -> Self {
+        match self {
+            Self::Positive(u) => Self::Positive(u.shrink()),
+            Self::Negative(u) => Self::Negative(u.shrink()),
+            Self::Other(Some(Other::Float(f))) => Self::Other(Some(Other::Float(f.shrink()))),
+            other => other,
+        }
+    }
+
+    /// Expand all numeric values to the largest wire representation.
+    #[inline]
+    pub fn expand(self) -> Self {
+        match self {
+            Self::Positive(u) => Self::Positive(u.expand()),
+            Self::Negative(u) => Self::Negative(u.expand()),
+            Self::Other(Some(Other::Float(f))) => Self::Other(Some(Other::Float(f.expand()))),
+            other => other,
+        }
+    }
+
     /// Encode this atom to an output.
     ///
     /// Note: for `Bytes` and `Text` variants, the length is derived from
@@ -62,10 +84,12 @@ impl Atom<'_> {
             Self::Negative(u) => u.encode(output, 1, &[]),
 
             Self::Bytes(None) => output.write(2 << 5 | 31, &[], &[]),
-            Self::Bytes(Some(b)) => Unsigned::from(b.len() as u64).encode(output, 2, b),
+            Self::Bytes(Some(b)) => Unsigned::from(b.len() as u64).shrink().encode(output, 2, b),
 
             Self::Text(None) => output.write(3 << 5 | 31, &[], &[]),
-            Self::Text(Some(s)) => Unsigned::from(s.len() as u64).encode(output, 3, s.as_bytes()),
+            Self::Text(Some(s)) => {
+                Unsigned::from(s.len() as u64).shrink().encode(output, 3, s.as_bytes())
+            }
 
             Self::Array(None) => output.write(4 << 5 | 31, &[], &[]),
             Self::Array(Some(u)) => u.encode(output, 4, &[]),
@@ -128,5 +152,106 @@ impl<'a> Atom<'a> {
         };
 
         Ok(Some(atom))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// From impls: convert Rust primitives to Atoms (shrinking by default)
+// ---------------------------------------------------------------------------
+
+impl From<u8> for Atom<'_> {
+    #[inline]
+    fn from(v: u8) -> Self {
+        Self::Positive(Unsigned::from(v))
+    }
+}
+
+impl From<u16> for Atom<'_> {
+    #[inline]
+    fn from(v: u16) -> Self {
+        Self::Positive(Unsigned::from(v))
+    }
+}
+
+impl From<u32> for Atom<'_> {
+    #[inline]
+    fn from(v: u32) -> Self {
+        Self::Positive(Unsigned::from(v))
+    }
+}
+
+impl From<u64> for Atom<'_> {
+    #[inline]
+    fn from(v: u64) -> Self {
+        Self::Positive(Unsigned::from(v))
+    }
+}
+
+impl From<i8> for Atom<'_> {
+    #[inline]
+    fn from(v: i8) -> Self {
+        if v.is_negative() {
+            Self::Negative(Unsigned::from(v as u8 ^ !0))
+        } else {
+            Self::Positive(Unsigned::from(v as u8))
+        }
+    }
+}
+
+impl From<i16> for Atom<'_> {
+    #[inline]
+    fn from(v: i16) -> Self {
+        if v.is_negative() {
+            Self::Negative(Unsigned::from(v as u16 ^ !0))
+        } else {
+            Self::Positive(Unsigned::from(v as u16))
+        }
+    }
+}
+
+impl From<i32> for Atom<'_> {
+    #[inline]
+    fn from(v: i32) -> Self {
+        if v.is_negative() {
+            Self::Negative(Unsigned::from(v as u32 ^ !0))
+        } else {
+            Self::Positive(Unsigned::from(v as u32))
+        }
+    }
+}
+
+impl From<i64> for Atom<'_> {
+    #[inline]
+    fn from(v: i64) -> Self {
+        if v.is_negative() {
+            Self::Negative(Unsigned::from(v as u64 ^ !0))
+        } else {
+            Self::Positive(Unsigned::from(v as u64))
+        }
+    }
+}
+
+impl From<f32> for Atom<'_> {
+    #[inline]
+    fn from(v: f32) -> Self {
+        Self::Other(Some(Other::Float(Float::from(v))))
+    }
+}
+
+impl From<f64> for Atom<'_> {
+    #[inline]
+    fn from(v: f64) -> Self {
+        Self::Other(Some(Other::Float(Float::from(v))))
+    }
+}
+
+impl From<bool> for Atom<'_> {
+    #[inline]
+    fn from(v: bool) -> Self {
+        Self::Other(Some(Other::Simple(if v {
+            Simple::TRUE
+        } else {
+            Simple::FALSE
+        })))
     }
 }

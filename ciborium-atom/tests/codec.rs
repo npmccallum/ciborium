@@ -809,3 +809,21 @@ fn encode_all_indefinite_markers() {
         assert_eq!(hex::encode(&buf), *hex_str);
     }
 }
+
+#[test]
+fn f16_subnormal_via_floats() {
+    use floats::casting::CastInto;
+    
+    // f16 0x0001 = smallest subnormal = 2^-24 = 5.960464477539063e-8
+    let h = floats::f16::from_bits(0x0001);
+    let as_f32: f32 = h.cast_into();
+    let as_f64: f64 = h.cast_into();
+    
+    let expected: f64 = 5.960464477539063e-8;
+    eprintln!("f16 0x0001 as f32: {as_f32:e} (bits: {:08x})", as_f32.to_bits());
+    eprintln!("f16 0x0001 as f64: {as_f64:e} (bits: {:016x})", as_f64.to_bits());
+    eprintln!("expected:          {expected:e} (bits: {:016x})", expected.to_bits());
+    
+    assert_eq!(as_f64.to_bits(), expected.to_bits(),
+        "floats crate f16 subnormal conversion is wrong");
+}
