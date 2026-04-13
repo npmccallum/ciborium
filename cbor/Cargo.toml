@@ -1,0 +1,33 @@
+[package]
+name = "cbor"
+version = "0.1.0"
+authors = ["Nathaniel McCallum <nathaniel@mccallum.life>"]
+license = "Apache-2.0"
+edition = "2024"
+homepage = "https://github.com/enarx/ciborium"
+repository = "https://github.com/enarx/ciborium"
+description = "serde implementation of CBOR"
+readme = "README.md"
+keywords = ["cbor", "serde"]
+categories = ["data-structures", "embedded", "encoding", "no-std", "parsing"]
+rust-version = "1.85"
+
+[dependencies]
+ciborium-atom = { path = "../ciborium-atom", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
+
+[dev-dependencies]
+hex = "0.4"
+serde_bytes = "0.11"
+rstest = "0.26"
+rand = "0.9"
+
+[features]
+default = ["std"]
+alloc = ["ciborium-atom/alloc"]
+std = ["alloc", "ciborium-atom/std", "serde/std"]
+nightly = ["ciborium-atom/nightly"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
